@@ -30,20 +30,6 @@ resource "aws_s3_bucket" "this" {
   tags                = var.tags
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "this" {
-  bucket = aws_s3_bucket.this[0].id
-
-  rule {
-    id     = "Incomplete multi-part uploads"
-    status = "Enabled"
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 8
-    }
-  }
-  depends_on = [aws_s3_bucket.this]
-}
-
 
 resource "aws_s3_bucket_public_access_block" "this" {
 
@@ -58,8 +44,21 @@ resource "aws_s3_bucket_public_access_block" "this" {
   ignore_public_acls      = true
   restrict_public_buckets = true
   
-  depends_on = [aws_s3_bucket.this,
-  aws_s3_bucket_lifecycle_configuration.this]
+  depends_on = [aws_s3_bucket.this]
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "this" {
+  bucket = aws_s3_bucket.this[0].id
+
+  rule {
+    id     = "Incomplete multi-part uploads"
+    status = "Enabled"
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 8
+    }
+  }
+  depends_on = [aws_s3_bucket.this,aws_s3_bucket_public_access_block.this]
 }
 
 resource "aws_s3_bucket_logging" "this" {
