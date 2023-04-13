@@ -259,6 +259,7 @@ data "aws_iam_policy_document" "require_latest_tls" {
       ]
     }
   }
+  depends_on = [aws_s3_bucket_lifecycle_configuration.this]
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {
@@ -322,6 +323,8 @@ resource "aws_s3_bucket_intelligent_tiering_configuration" "this" {
       days        = tiering.value.days
     }
   }
+    
+    depends_on = [aws_s3_bucket_lifecycle_configuration.this]
 
 }
 
@@ -391,6 +394,7 @@ resource "aws_s3_bucket_inventory" "this" {
       prefix = try(each.value.filter.prefix, null)
     }
   }
+    depends_on = [aws_s3_bucket_lifecycle_configuration.this]
 }
 
 # Inventory and analytics destination bucket requires a bucket policy to allow source to PutObjects
@@ -476,4 +480,5 @@ resource "aws_s3_bucket_analytics_configuration" "this" {
       }
     }
   }
+    depends_on = [aws_s3_bucket_lifecycle_configuration.this]
 }
