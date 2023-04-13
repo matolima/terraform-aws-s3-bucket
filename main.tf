@@ -47,19 +47,7 @@ resource "aws_s3_bucket_public_access_block" "this" {
   depends_on = [aws_s3_bucket.this]
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "this" {
-  bucket = aws_s3_bucket.this[0].id
 
-  rule {
-    id     = "Incomplete multi-part uploads"
-    status = "Enabled"
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 8
-    }
-  }
-  depends_on = [aws_s3_bucket.this,aws_s3_bucket_public_access_block.this]
-}
 
 resource "aws_s3_bucket_logging" "this" {
   count = local.create_bucket && length(keys(var.logging)) > 0 ? 1 : 0
