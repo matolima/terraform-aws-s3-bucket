@@ -32,7 +32,7 @@ resource "aws_s3_bucket" "this" {
 
 
 resource "aws_s3_bucket_lifecycle_configuration" "this" {
-  bucket = aws_s3_bucket.this[0].name
+  bucket = aws_s3_bucket.this[0].arn
 
   rule {
     id     = "Incomplete multi-part uploads"
