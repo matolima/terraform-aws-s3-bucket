@@ -275,7 +275,6 @@ resource "aws_s3_bucket_public_access_block" "this" {
   ignore_public_acls      = var.ignore_public_acls
   restrict_public_buckets = var.restrict_public_buckets
   
-  depends_on = [aws_s3_bucket_lifecycle_configuration.this]
 }
 
   
