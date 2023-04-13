@@ -531,6 +531,7 @@ data "aws_iam_policy_document" "combined" {
 
 # AWS Load Balancer access log delivery policy
 locals {
+  
   # List of AWS regions where permissions should be granted to the specified Elastic Load Balancing account ID ( https://docs.aws.amazon.com/elasticloadbalancing/latest/application/enable-access-logging.html#attach-bucket-policy )
   elb_service_accounts = {
     us-east-1      = "127311923021"
