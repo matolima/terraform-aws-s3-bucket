@@ -1,33 +1,3 @@
-Skip to content
-Search or jump to…
-Pull requests
-Issues
-Codespaces
-Marketplace
-Explore
- 
-@matolima 
-orion-devops-team
-/
-terraform-aws-s3-bucket
-Public
-forked from terraform-aws-modules/terraform-aws-s3-bucket
-Fork your own copy of orion-devops-team/terraform-aws-s3-bucket
-Code
-Pull requests
-Actions
-Projects
-Security
-Insights
-terraform-aws-s3-bucket/main.tf
-@jseiser
-jseiser Fixed aws partition value (terraform-aws-modules#221)
-Latest commit c25b19b last month
- History
- 22 contributors
-@antonbabenko@magreenbaum@bryantbiggs@m4t22@yyarmoshyk@serhatcetinkaya@phr3nzii@aiell0@exocom@jseiser@jaybocc2@refl3ction
-934 lines (729 sloc)  30.1 KB
- 
 
 data "aws_region" "current" {}
 
