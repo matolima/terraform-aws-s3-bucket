@@ -31,9 +31,10 @@ resource "aws_s3_bucket" "this" {
   lifecycle_rule{
     id     = "Incomplete multi-part uploads"
     enabled = true
+    prefix = "abort_incomplete_multipart_upload/"
 
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 8
+    expiration {
+      days = 8
     }
   }
 }
