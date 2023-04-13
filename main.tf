@@ -223,7 +223,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
       days_after_initiation = 8
     }
   }
-  depends_on = [aws_s3_bucket_versioning.this]
+  depends_on = [aws_s3_bucket.this]
 }
 
 
