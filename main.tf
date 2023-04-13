@@ -33,10 +33,6 @@ resource "aws_s3_bucket" "this" {
 
 resource "aws_s3_bucket_public_access_block" "this" {
 
-  # Chain resources (s3_bucket -> s3_bucket_policy -> s3_bucket_public_access_block)
-  # to prevent "A conflicting conditional operation is currently in progress against this resource."
-  # Ref: https://github.com/hashicorp/terraform-provider-aws/issues/7628
-
   bucket =  aws_s3_bucket.this[0].id
 
   block_public_acls       = true
@@ -47,7 +43,19 @@ resource "aws_s3_bucket_public_access_block" "this" {
   depends_on = [aws_s3_bucket.this]
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "this" {
+  bucket = aws_s3_bucket.this[0].id
 
+  rule {
+    id     = "Incomplete multi-part uploads"
+    status = "Enabled"
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 8
+    }
+  }
+  depends_on = [aws_s3_bucket.this]
+}
 
 resource "aws_s3_bucket_logging" "this" {
   count = local.create_bucket && length(keys(var.logging)) > 0 ? 1 : 0
