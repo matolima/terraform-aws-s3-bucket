@@ -8,7 +8,7 @@ data "aws_partition" "current" {}
 locals {
   create_bucket = var.create_bucket && var.putin_khuylo
 
-  attach_policy = var.attach_require_latest_tls_policy || var.attach_elb_log_delivery_policy || var.attach_lb_log_delivery_policy || var.attach_deny_insecure_transport_policy 
+  attach_policy = var.attach_require_latest_tls_policy || var.attach_elb_log_delivery_policy || var.attach_lb_log_delivery_policy || var.attach_deny_insecure_transport_policy || var.attach_inventory_destination_policy || var.attach_policy
 
   # Variables with type `any` should be jsonencode()'d when value is coming from Terragrunt
   grants               = try(jsondecode(var.grant), var.grant)
@@ -51,6 +51,8 @@ resource "aws_s3_bucket_policy" "this" {
 
   bucket = aws_s3_bucket.this[0].id
   policy = data.aws_iam_policy_document.combined[0].json
+  
+  depends_on = [aws_s3_bucket_lifecycle_configuration.this]
 }
 
 data "aws_iam_policy_document" "combined" {
@@ -272,3 +274,201 @@ resource "aws_s3_bucket_public_access_block" "this" {
   restrict_public_buckets = var.restrict_public_buckets
 }
 
+  
+resource "aws_s3_bucket_ownership_controls" "this" {
+  count = local.create_bucket && var.control_object_ownership ? 1 : 0
+
+  bucket = local.attach_policy ? aws_s3_bucket_policy.this[0].id : aws_s3_bucket.this[0].id
+
+  rule {
+    object_ownership = var.object_ownership
+  }
+
+  # This `depends_on` is to prevent "A conflicting conditional operation is currently in progress against this resource."
+  depends_on = [
+    aws_s3_bucket_policy.this,
+    aws_s3_bucket_public_access_block.this,
+    aws_s3_bucket.this
+  ]
+}
+
+resource "aws_s3_bucket_intelligent_tiering_configuration" "this" {
+  for_each = { for k, v in local.intelligent_tiering : k => v if local.create_bucket }
+
+  name   = each.key
+  bucket = aws_s3_bucket.this[0].id
+  status = try(tobool(each.value.status) ? "Enabled" : "Disabled", title(lower(each.value.status)), null)
+
+  # Max 1 block - filter
+  dynamic "filter" {
+    for_each = length(try(flatten([each.value.filter]), [])) == 0 ? [] : [true]
+
+    content {
+      prefix = try(each.value.filter.prefix, null)
+      tags   = try(each.value.filter.tags, null)
+    }
+  }
+
+  dynamic "tiering" {
+    for_each = each.value.tiering
+
+    content {
+      access_tier = tiering.key
+      days        = tiering.value.days
+    }
+  }
+
+}
+
+resource "aws_s3_bucket_metric" "this" {
+  for_each = { for k, v in local.metric_configuration : k => v if local.create_bucket }
+
+  name   = each.value.name
+  bucket = aws_s3_bucket.this[0].id
+
+  dynamic "filter" {
+    for_each = length(try(flatten([each.value.filter]), [])) == 0 ? [] : [true]
+    content {
+      prefix = try(each.value.filter.prefix, null)
+      tags   = try(each.value.filter.tags, null)
+    }
+  }
+}
+
+resource "aws_s3_bucket_inventory" "this" {
+  for_each = { for k, v in var.inventory_configuration : k => v if local.create_bucket }
+
+  name                     = each.key
+  bucket                   = try(each.value.bucket, aws_s3_bucket.this[0].id)
+  included_object_versions = each.value.included_object_versions
+  enabled                  = try(each.value.enabled, true)
+  optional_fields          = try(each.value.optional_fields, null)
+
+  destination {
+    bucket {
+      bucket_arn = try(each.value.destination.bucket_arn, aws_s3_bucket.this[0].arn)
+      format     = try(each.value.destination.format, null)
+      account_id = try(each.value.destination.account_id, null)
+      prefix     = try(each.value.destination.prefix, null)
+
+      dynamic "encryption" {
+        for_each = length(try(flatten([each.value.destination.encryption]), [])) == 0 ? [] : [true]
+
+        content {
+
+          dynamic "sse_kms" {
+            for_each = each.value.destination.encryption.encryption_type == "sse_kms" ? [true] : []
+
+            content {
+              key_id = try(each.value.destination.encryption.kms_key_id, null)
+            }
+          }
+
+          dynamic "sse_s3" {
+            for_each = each.value.destination.encryption.encryption_type == "sse_s3" ? [true] : []
+
+            content {
+            }
+          }
+        }
+      }
+    }
+  }
+
+  schedule {
+    frequency = each.value.frequency
+  }
+
+  dynamic "filter" {
+    for_each = length(try(flatten([each.value.filter]), [])) == 0 ? [] : [true]
+
+    content {
+      prefix = try(each.value.filter.prefix, null)
+    }
+  }
+}
+
+# Inventory and analytics destination bucket requires a bucket policy to allow source to PutObjects
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html#example-bucket-policies-use-case-9
+data "aws_iam_policy_document" "inventory_and_analytics_destination_policy" {
+  count = local.create_bucket && var.attach_inventory_destination_policy || var.attach_analytics_destination_policy ? 1 : 0
+
+  statement {
+    sid    = "destinationInventoryAndAnalyticsPolicy"
+    effect = "Allow"
+
+    actions = [
+      "s3:PutObject",
+    ]
+
+    resources = [
+      "${aws_s3_bucket.this[0].arn}/*",
+    ]
+
+    principals {
+      type        = "Service"
+      identifiers = ["s3.amazonaws.com"]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values = compact(distinct([
+        var.inventory_self_source_destination ? aws_s3_bucket.this[0].arn : var.inventory_source_bucket_arn,
+        var.analytics_self_source_destination ? aws_s3_bucket.this[0].arn : var.analytics_source_bucket_arn
+      ]))
+    }
+
+    condition {
+      test = "StringEquals"
+      values = compact(distinct([
+        var.inventory_self_source_destination ? data.aws_caller_identity.current.id : var.inventory_source_account_id,
+        var.analytics_self_source_destination ? data.aws_caller_identity.current.id : var.analytics_source_account_id
+      ]))
+      variable = "aws:SourceAccount"
+    }
+
+    condition {
+      test     = "StringEquals"
+      values   = ["bucket-owner-full-control"]
+      variable = "s3:x-amz-acl"
+    }
+  }
+}
+
+resource "aws_s3_bucket_analytics_configuration" "this" {
+  for_each = { for k, v in var.analytics_configuration : k => v if local.create_bucket }
+
+  bucket = aws_s3_bucket.this[0].id
+  name   = each.key
+
+  dynamic "filter" {
+    for_each = length(try(flatten([each.value.filter]), [])) == 0 ? [] : [true]
+
+    content {
+      prefix = try(each.value.filter.prefix, null)
+      tags   = try(each.value.filter.tags, null)
+    }
+  }
+
+  dynamic "storage_class_analysis" {
+    for_each = length(try(flatten([each.value.storage_class_analysis]), [])) == 0 ? [] : [true]
+
+    content {
+
+      data_export {
+        output_schema_version = try(each.value.storage_class_analysis.output_schema_version, null)
+
+        destination {
+
+          s3_bucket_destination {
+            bucket_arn        = try(each.value.storage_class_analysis.destination_bucket_arn, aws_s3_bucket.this[0].arn)
+            bucket_account_id = try(each.value.storage_class_analysis.destination_account_id, data.aws_caller_identity.current.id)
+            format            = try(each.value.storage_class_analysis.export_format, "CSV")
+            prefix            = try(each.value.storage_class_analysis.export_prefix, null)
+          }
+        }
+      }
+    }
+  }
+}
