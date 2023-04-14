@@ -6,7 +6,7 @@ locals {
 
 }
 
-resource "aws_s3_bucket" "this" {
+resource "aws_s3_bucket" "buck" {
   count = local.create_bucket ? 1 : 0
 
   bucket        = var.bucket
@@ -20,18 +20,18 @@ resource "aws_s3_bucket" "this" {
 
 resource "aws_s3_bucket_public_access_block" "this" {
 
-  bucket =  aws_s3_bucket.this[0].id
+  bucket =  aws_s3_bucket.buck.id
 
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
   
-  depends_on = [aws_s3_bucket.this]
+  depends_on = [aws_s3_bucket.buck]
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "this" {
-  bucket = aws_s3_bucket.this[0].id
+  bucket = aws_s3_bucket.buck.id
 
   rule {
     id     = "Incomplete multi-part uploads"
@@ -41,5 +41,5 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
       days_after_initiation = 8
     }
   }
-  depends_on = [aws_s3_bucket.this]
+  depends_on = [aws_s3_bucket.buck]
 }
