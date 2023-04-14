@@ -7,7 +7,6 @@ locals {
 }
 
 resource "aws_s3_bucket" "buck" {
-  count = local.create_bucket ? 1 : 0
 
   bucket        = var.bucket
   bucket_prefix = var.bucket_prefix
